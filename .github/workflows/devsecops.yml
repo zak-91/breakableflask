@@ -1,47 +1,65 @@
 name: Automatisation des tests DevSecOps
 on: push
+
 jobs:
+
   Dependances:
-   runs-on: ubuntu-latest
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v4
- 
-     - name: Scan requirements.txt avec Trivy (non bloquant)
-       run: |
-         echo "🔍 Scan des dépendances avec Trivy (requirements.txt)…"
- 
-         docker run --rm -v "$PWD":/app -w /app aquasec/trivy:latest fs \
-         --scanners vuln \
-         --pkg-types library \
-         --file-patterns 'pip:requirements\.txt' \
-         --severity HIGH,CRITICAL \
-         --exit-code 0 \
-         --format table \
-         /app
- 
-         echo "⚠️ Le pipeline continue même si des vulnérabilités sont trouvées."
- 
-        
-  Dockerfile:
-   runs-on: ubuntu-latest
-   needs: Dependances
-   steps:
-     - name: Checkout code
-       uses: actions/checkout@v4
- 
-     - name: Analyse du Dockerfile avec Trivy (non bloquant)
-       run: |
-         echo "🔍 Analyse du Dockerfile (config scan)…"
- 
-         docker run --rm -v "$PWD":/app -w /app aquasec/trivy:latest config \
-         --misconfig-scanners dockerfile \
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan requirements.txt avec Trivy (non bloquant)
+        run: |
+          echo "🔍 Scan des dépendances avec Trivy (requirements.txt)…"
+
+          docker run --rm -v "$PWD":/app -w /app aquasec/trivy:latest fs \
+          --scanners vuln \
+          --pkg-types library \
+          --file-patterns 'pip:requirements\.txt' \
           --severity HIGH,CRITICAL \
           --exit-code 0 \
-          --format table \
+          --format json \
+          --output trivy-dependances.json \
           /app
- 
-         echo "⚠️ Le pipeline continue même si des problèmes sont détectés."
+
+          echo "⚠️ Le pipeline continue même si des vulnérabilités sont trouvées."
+
+      - name: Upload artefact - Scan dépendances
+        uses: actions/upload-artifact@v3
+        with:
+          name: rapport-dependances
+          path: trivy-dependances.json
+
+
+  Dockerfile:
+    runs-on: ubuntu-latest
+    needs: Dependances
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Analyse du Dockerfile avec Trivy (non bloquant)
+        run: |
+          echo "🔍 Analyse du Dockerfile (config scan)…"
+
+          docker run --rm -v "$PWD":/app -w /app aquasec/trivy:latest config \
+            --misconfig-scanners dockerfile \
+            --severity HIGH,CRITICAL \
+            --exit-code 0 \
+            --format json \
+            --output trivy-dockerfile.json \
+            /app
+
+          echo "⚠️ Le pipeline continue même si des problèmes sont détectés."
+
+      - name: Upload artefact - Scan Dockerfile
+        uses: actions/upload-artifact@v3
+        with:
+          name: rapport-dockerfile
+          path: trivy-dockerfile.json
+
+
   Deploy:
     runs-on: ubuntu-latest
     needs: Dockerfile
